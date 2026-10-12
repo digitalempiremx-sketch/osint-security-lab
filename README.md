@@ -1,105 +1,396 @@
-# Todo List App
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import * as Location from 'expo-location';
 
-Una aplicación de tareas (to-do list) moderna y fácil de usar con almacenamiento local.
+type WeatherData = {
+  current: {
+    temperature_2m: number;
+    apparent_temperature: number;
+    relative_humidity_2m: number;
+    wind_speed_10m: number;
+    weather_code: number;
+    time: string;
+  };
+  daily: {
+    time: string[];
+    temperature_2m_max: number[];
+    temperature_2m_min: number[];
+    weather_code: number[];
+  };
+  timezone: string;
+};
 
-## Características
+const weatherCodeMap: Record<number, { label: string; icon: string }> = {
+  0: { label: 'Clear sky', icon: '☀️' },
+  1: { label: 'Mainly clear', icon: '🌤️' },
+  2: { label: 'Partly cloudy', icon: '⛅' },
+  3: { label: 'Overcast', icon: '☁️' },
+  45: { label: 'Fog', icon: '🌫️' },
+  48: { label: 'Depositing rime fog', icon: '🌫️' },
+  51: { label: 'Light drizzle', icon: '🌦️' },
+  53: { label: 'Moderate drizzle', icon: '🌦️' },
+  55: { label: 'Dense drizzle', icon: '🌧️' },
+  56: { label: 'Freezing drizzle', icon: '🌧️' },
+  57: { label: 'Heavy freezing drizzle', icon: '🌧️' },
+  61: { label: 'Slight rain', icon: '🌦️' },
+  63: { label: 'Moderate rain', icon: '🌧️' },
+  65: { label: 'Heavy rain', icon: '🌧️' },
+  66: { label: 'Freezing rain', icon: '🌧️' },
+  67: { label: 'Heavy freezing rain', icon: '🌧️' },
+  71: { label: 'Slight snow', icon: '🌨️' },
+  73: { label: 'Moderate snow', icon: '❄️' },
+  75: { label: 'Heavy snow', icon: '❄️' },
+  77: { label: 'Snow grains', icon: '❄️' },
+  80: { label: 'Rain showers', icon: '🌦️' },
+  81: { label: 'Heavy showers', icon: '🌧️' },
+  82: { label: 'Violent showers', icon: '⛈️' },
+  85: { label: 'Slight snow showers', icon: '🌨️' },
+  86: { label: 'Heavy snow showers', icon: '❄️' },
+  95: { label: 'Thunderstorm', icon: '⛈️' },
+  96: { label: 'Thunderstorm with hail', icon: '⛈️' },
+  99: { label: 'Heavy hail storm', icon: '⛈️' },
+};
 
-- ✅ **Crear tareas** con título, descripción y prioridad
-- 🎯 **Establecer prioridades** (baja, media, alta)
-- ✔️ **Marcar tareas como completadas**
-- 📅 **Fechas de vencimiento** (opcional)
-- 🗂️ **Filtrar tareas** (todas, activas, completadas)
-- 💾 **Almacenamiento local** con SQLite
-- 📊 **Estadísticas** en tiempo real
-- 🗑️ **Eliminar tareas** individuales o en lote
+const formatDay = (dateStr: string) =>
+  new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short' });
 
-## Requisitos
+export default function App() {
+  const [query, setQuery] = useState('Mexico City');
+  const [cityName, setCityName] = useState('Mexico City');
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-- Node.js 18+
-- npm o yarn
-- Expo CLI
-- Un teléfono o emulador (Android/iOS)
+  const fetchWeatherByCity = async (city: string) => {
+    if (!city.trim()) {
+      setError('Please enter a city');
+      return;
+    }
 
-## Instalación
+    setLoading(true);
+    setError('');
 
-```bash
-npm install
-```
+    try {
+      const geoRes = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`
+      );
+      const geoData = await geoRes.json();
 
-## Ejecutar
+      const location = geoData.results?.[0];
+      if (!location) {
+        throw new Error('City not found');
+      }
 
-### Desarrollo
-```bash
-npx expo start
-```
+      const lat = location.latitude;
+      const lon = location.longitude;
+      const weatherRes = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=5`
+      );
+      const data = await weatherRes.json();
 
-Luego selecciona:
-- `a` para abrir en Android Emulator
-- `i` para abrir en iOS Simulator
-- `w` para abrir en navegador web
-- Escanea el QR con Expo Go en tu teléfono
+      setWeather(data);
+      setCityName(`${location.name}, ${location.country || ''}`.trim());
+      setQuery(location.name || city);
+    } catch (err: any) {
+      setError(err.message || 'Could not load the weather');
+      setWeather(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-### Compilar APK (Android)
-```bash
-eas build --platform android --profile preview
-```
+  const fetchWeatherByLocation = async () => {
+    try {
+      setLoading(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        throw new Error('Location permission was not granted');
+      }
 
-### Compilar IPA (iOS)
-```bash
-eas build --platform ios --profile preview
-```
+      const current = await Location.getCurrentPositionAsync({});
+      const lat = current.coords.latitude;
+      const lon = current.coords.longitude;
+      const weatherRes = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=5`
+      );
+      const data = await weatherRes.json();
+      setWeather(data);
+      setCityName('Current location');
+      setQuery('');
+    } catch (err: any) {
+      setError(err.message || 'Could not get your location');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-## Estructura
+  useEffect(() => {
+    fetchWeatherByCity('Mexico City');
+  }, []);
 
-```
-osint-security-lab/
-├── App.tsx              # Componente principal
-├── src/
-│   ├── database.ts      # Funciones de base de datos SQLite
-│   └── types.ts         # Tipos TypeScript
-├── package.json
-├── app.json             # Configuración de Expo
-└── tsconfig.json
-```
+  const currentWeather = weather?.current;
+  const daily = weather?.daily;
 
-## Base de Datos
+  const summary = useMemo(() => {
+    if (!currentWeather) return null;
+    const code = currentWeather.weather_code;
+    return weatherCodeMap[code] || { label: 'Weather', icon: '🌤️' };
+  }, [currentWeather]);
 
-La app usa **SQLite** para almacenamiento local. Los datos se guardan automáticamente en el dispositivo:
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar style="light" />
+      <View style={styles.container}>
+        <Text style={styles.title}>Weather Dashboard</Text>
 
-- Tabla `todos`: Almacena todas las tareas
-  - `id`: Identificador único
-  - `title`: Título de la tarea
-  - `description`: Descripción opcional
-  - `completed`: Estado (0 = activa, 1 = completada)
-  - `priority`: Prioridad (low, medium, high)
-  - `dueDate`: Fecha de vencimiento opcional
-  - `createdAt`: Fecha de creación
-  - `completedAt`: Fecha de finalización
+        <View style={styles.searchRow}>
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Enter city"
+            placeholderTextColor="#94A3B8"
+            style={styles.input}
+          />
+          <TouchableOpacity style={styles.searchButton} onPress={() => fetchWeatherByCity(query)}>
+            <Text style={styles.searchButtonText}>Search</Text>
+          </TouchableOpacity>
+        </View>
 
-## Uso
+        <TouchableOpacity style={styles.locationButton} onPress={fetchWeatherByLocation}>
+          <Text style={styles.locationButtonText}>Use my location</Text>
+        </TouchableOpacity>
 
-1. **Crear tarea**: Presiona "+ Add Task"
-2. **Establecer prioridad**: Elige entre baja, media o alta
-3. **Marcar como hecha**: Presiona el checkbox
-4. **Eliminar**: Presiona el botón de basura
-5. **Filtrar**: Usa los botones All, Active, Completed
-6. **Limpiar completadas**: Presiona "Clear Completed"
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color="#60A5FA" />
+            <Text style={styles.loadingText}>Loading weather...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
 
-## Desarrollo
+        {currentWeather && weather && summary && (
+          <>
+            <View style={styles.card}>
+              <Text style={styles.location}>{cityName}</Text>
+              <Text style={styles.temp}>{Math.round(currentWeather.temperature_2m)}°C</Text>
+              <Text style={styles.condition}>
+                {summary.icon} {summary.label}
+              </Text>
 
-### Agregar nuevas funcionalidades
+              <View style={styles.statRow}>
+                <View style={styles.statBox}>
+                  <Text style={styles.statLabel}>Feels like</Text>
+                  <Text style={styles.statValue}>{Math.round(currentWeather.apparent_temperature)}°C</Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Text style={styles.statLabel}>Humidity</Text>
+                  <Text style={styles.statValue}>{currentWeather.relative_humidity_2m}%</Text>
+                </View>
+              </View>
 
-1. Modifica `App.tsx` para la UI
-2. Agrega funciones de base de datos en `src/database.ts`
-3. Actualiza tipos en `src/types.ts`
+              <View style={styles.statRow}>
+                <View style={styles.statBox}>
+                  <Text style={styles.statLabel}>Wind</Text>
+                  <Text style={styles.statValue}>{Math.round(currentWeather.wind_speed_10m)} km/h</Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Text style={styles.statLabel}>Updated</Text>
+                  <Text style={styles.statValue}>{new Date(currentWeather.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                </View>
+              </View>
+            </View>
 
-### Pruebas
+            <Text style={styles.forecastTitle}>5-day forecast</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {daily?.time.map((day, index) => {
+                const code = daily.weather_code[index];
+                const info = weatherCodeMap[code] || { label: 'Weather', icon: '🌤️' };
+                const high = Math.round(daily.temperature_2m_max[index]);
+                const low = Math.round(daily.temperature_2m_min[index]);
 
-La app usa Expo Testing Library. Ejecuta pruebas con:
-```bash
-npm test
-```
+                return (
+                  <View key={day} style={styles.forecastItem}>
+                    <Text style={styles.forecastDay}>{formatDay(day)}</Text>
+                    <Text style={styles.forecastIcon}>{info.icon}</Text>
+                    <Text style={styles.forecastLabel}>{info.label}</Text>
+                    <Text style={styles.forecastTemp}>{high}° / {low}°</Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </>
+        )}
+      </View>
+    </SafeAreaView>
+  );
+}
 
-## Licencia
-
-MIT
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#020817',
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#020817',
+    padding: 20,
+  },
+  title: {
+    color: '#F8FAFC',
+    fontSize: 30,
+    fontWeight: '700',
+    marginBottom: 18,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: '#F8FAFC',
+    marginRight: 10,
+  },
+  searchButton: {
+    backgroundColor: '#2563EB',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+  },
+  searchButtonText: {
+    color: '#F8FAFC',
+    fontWeight: '700',
+  },
+  locationButton: {
+    backgroundColor: '#0F172A',
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  locationButtonText: {
+    color: '#CBD5E1',
+    fontWeight: '600',
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 30,
+  },
+  loadingText: {
+    color: '#94A3B8',
+    marginTop: 10,
+  },
+  errorBox: {
+    backgroundColor: '#7F1D1D',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 18,
+  },
+  errorText: {
+    color: '#FEE2E2',
+    fontWeight: '600',
+  },
+  card: {
+    backgroundColor: '#0F172A',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    padding: 20,
+    marginBottom: 20,
+  },
+  location: {
+    color: '#E2E8F0',
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  temp: {
+    color: '#F8FAFC',
+    fontSize: 58,
+    fontWeight: '800',
+    marginTop: 8,
+  },
+  condition: {
+    color: '#93C5FD',
+    fontSize: 18,
+    marginTop: 4,
+  },
+  statRow: {
+    flexDirection: 'row',
+    marginTop: 18,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: '#111827',
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 4,
+  },
+  statLabel: {
+    color: '#94A3B8',
+    fontSize: 12,
+  },
+  statValue: {
+    color: '#F8FAFC',
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  forecastTitle: {
+    color: '#F8FAFC',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  forecastItem: {
+    width: 120,
+    backgroundColor: '#0F172A',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1E293B',
+    padding: 14,
+    marginRight: 12,
+    alignItems: 'center',
+  },
+  forecastDay: {
+    color: '#CBD5E1',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  forecastIcon: {
+    fontSize: 28,
+    marginBottom: 8,
+  },
+  forecastLabel: {
+    color: '#94A3B8',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  forecastTemp: {
+    color: '#F8FAFC',
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+});

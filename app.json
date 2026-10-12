@@ -1,26 +1,12 @@
 {
   "expo": {
-    "name": "Todo List App",
-    "slug": "todo-list-app",
+    "name": "Weather Dashboard",
+    "slug": "weather-dashboard",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "assetBundlePatterns": [
       "**/*"
-    ],
-    "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.todolistapp"
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0F172A"
-      },
-      "package": "com.todolistapp"
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    ]
   }
 }

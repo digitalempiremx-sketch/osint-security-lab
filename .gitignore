@@ -1,14 +1,25 @@
-node_modules/
-.expo/
-.expo-shared/
-dist/
-npm-debug.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-*.orig.*
-web-build/
-*.db
-.DS_Store
+# Weather Dashboard
+
+A simple mobile weather dashboard built with Expo and the public Open-Meteo API.
+
+## Features
+
+- Search for a city
+- Use current location
+- Current weather conditions
+- 5-day forecast
+- Dark mobile UI
+- No API key required
+
+## Run it
+
+```bash
+npm install
+npx expo start
+```
+
+Then open it in an Android emulator, iOS simulator, or Expo Go on your phone.
+
+## Notes
+
+This app uses Open-Meteo, which is a public and free weather API that does not require an API key.
